@@ -41,3 +41,21 @@ def update_product():
     if success:
         return jsonify({"message": "Product updated successfully"}), 200
     return jsonify({"message": "Product not found"}), 404
+
+@product_bp.route('/delete', methods=['POST'])
+def delete_product():
+    data = request.json
+    product_id = data.get('id')
+
+    if not product_id:
+        return jsonify({"message": "Product ID is required"}), 400
+
+    success = product_service.delete_product(product_id)
+    if success:
+        return jsonify({"message": "Product deleted successfully"}), 200
+    return jsonify({"message": "Product not found"}), 404
+
+@product_bp.route('/all', methods=['GET'])
+def get_all_products():
+    products = product_service.get_all_products()
+    return jsonify([product.dict() for product in products]), 200
