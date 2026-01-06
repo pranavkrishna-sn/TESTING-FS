@@ -1,6 +1,5 @@
 import logging
 import sys
-from datetime import datetime
 from typing import Any
 from flask import Flask, jsonify, request
 from logging.config import dictConfig
@@ -27,9 +26,39 @@ def configure_logging() -> None:
         }
     })
 
-PRODUCTS: dict[int, dict[str, Any]] = {}
-ADMIN_TOKENS = {"admin12345"}
-PRODUCT_ID_COUNTER = 1
+PRODUCTS = [
+    {
+        "id": 1,
+        "name": "Wireless Mouse",
+        "category": "Electronics",
+        "attributes": {"color": "black", "brand": "TechPro"},
+        "description": "Ergonomic wireless mouse",
+    },
+    {
+        "id": 2,
+        "name": "Bluetooth Headphones",
+        "category": "Electronics",
+        "attributes": {"color": "white", "brand": "SoundBeat"},
+        "description": "Noise-cancelling Bluetooth headphones",
+    },
+    {
+        "id": 3,
+        "name": "Office Chair",
+        "category": "Furniture",
+        "attributes": {"color": "blue", "material": "fabric"},
+        "description": "Comfortable ergonomic office chair",
+    }
+]
+
+PAGE_SIZE_DEFAULT = 2
+
+def highlight_term(text: str, term: str) -> str:
+    lower_text, lower_term = text.lower(), term.lower()
+    if lower_term in lower_text:
+        start = lower_text.index(lower_term)
+        end = start + len(term)
+        return text[:start] + "[" + text[start:end] + "]" + text[end:]
+    return text
 
 def create_app() -> Flask:
     configure_logging()
@@ -39,60 +68,44 @@ def create_app() -> Flask:
     def health_check() -> Any:
         return jsonify({"status": "ok"}), 200
 
-    @app.route("/products", methods=["POST"])
-    def add_product() -> Any:
-        nonlocal PRODUCT_ID_COUNTER
-        data = request.get_json(silent=True) or {}
-        name = data.get("name")
-        price = data.get("price")
-        description = data.get("description")
+    @app.route("/products/search", methods=["GET"])
+    def search_products() -> Any:
+        query = request.args.get("query", "").strip()
+        page = int(request.args.get("page", 1))
+        size = int(request.args.get("size", PAGE_SIZE_DEFAULT))
 
-        if not name or not description or price is None:
-            return jsonify({"error": "Name, description and price are required"}), 400
-        if name in [p["name"] for p in PRODUCTS.values() if not p["deleted"]]:
-            return jsonify({"error": "Product name must be unique"}), 400
-        if not isinstance(price, (int, float)) or price <= 0:
-            return jsonify({"error": "Invalid price"}), 400
+        if not query:
+            return jsonify({"error": "Query parameter is required"}), 400
 
-        PRODUCTS[PRODUCT_ID_COUNTER] = {
-            "id": PRODUCT_ID_COUNTER,
-            "name": name,
-            "price": price,
-            "description": description,
-            "deleted": False,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        }
-        app.logger.info("Product '%s' created successfully.", name)
-        PRODUCT_ID_COUNTER += 1
-        return jsonify({"message": "Product created"}), 201
+        filtered = []
+        for product in PRODUCTS:
+            match_fields = [
+                product["name"].lower(),
+                product["category"].lower(),
+                " ".join(str(v).lower() for v in product["attributes"].values()),
+            ]
+            if any(query.lower() in field for field in match_fields):
+                highlighted_name = highlight_term(product["name"], query)
+                highlighted_description = highlight_term(product["description"], query)
+                filtered.append({
+                    **product,
+                    "name": highlighted_name,
+                    "description": highlighted_description,
+                })
 
-    @app.route("/products/<int:product_id>/delete", methods=["DELETE"])
-    def delete_product(product_id: int) -> Any:
-        token = request.headers.get("X-Admin-Token")
-        confirm = request.args.get("confirm", "false").lower()
+        total = len(filtered)
+        start_index = (page - 1) * size
+        end_index = start_index + size
+        paginated = filtered[start_index:end_index]
 
-        if token not in ADMIN_TOKENS:
-            app.logger.warning("Unauthorized delete attempt.")
-            return jsonify({"error": "Unauthorized - Admin access required"}), 403
-        if confirm != "true":
-            return jsonify({"error": "Confirmation required"}), 400
-
-        product = PRODUCTS.get(product_id)
-        if not product or product["deleted"]:
-            app.logger.warning("Product not found or already deleted, ID: %s", product_id)
-            return jsonify({"error": "Product not found"}), 404
-
-        product["deleted"] = True
-        product["updated_at"] = datetime.utcnow().isoformat()
-        PRODUCTS[product_id] = product
-        app.logger.info("Product %s marked as deleted.", product["name"])
-        return jsonify({"message": f"Product '{product['name']}' deleted successfully"}), 200
-
-    @app.route("/products", methods=["GET"])
-    def list_products() -> Any:
-        visible_products = [p for p in PRODUCTS.values() if not p["deleted"]]
-        return jsonify(visible_products), 200
+        app.logger.info("Search executed for query '%s' returning %d/%d results.", query, len(paginated), total)
+        return jsonify({
+            "query": query,
+            "page": page,
+            "page_size": size,
+            "total_results": total,
+            "results": paginated,
+        }), 200
 
     @app.errorhandler(Exception)
     def handle_exception(e: Exception) -> Any:
