@@ -59,3 +59,6 @@ class UserService:
         self.user_repository.update_user(user)
         self.password_reset_repository.mark_token_as_used(password_reset)
         return True
+
+    def update_user_profile(self, user: User) -> None:
+        self.user_repository.update_user(user)
