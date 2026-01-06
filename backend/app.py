@@ -1,9 +1,10 @@
 import logging
 import sys
+import secrets
+from datetime import datetime, timedelta
 from typing import Any
 from flask import Flask, jsonify, request
 from logging.config import dictConfig
-from datetime import datetime, timedelta
 
 def configure_logging() -> None:
     dictConfig({
@@ -27,11 +28,8 @@ def configure_logging() -> None:
         }
     })
 
-FAILED_ATTEMPTS: dict[str, int] = {}
-LAST_LOGIN: dict[str, datetime] = {}
-SESSION_EXPIRY: dict[str, datetime] = {}
-MAX_ATTEMPTS = 5
-SESSION_TIMEOUT_MINUTES = 30
+PASSWORD_RESET_TOKENS: dict[str, dict[str, Any]] = {}
+TOKEN_EXPIRATION_HOURS = 24
 
 def create_app() -> Flask:
     configure_logging()
@@ -41,46 +39,69 @@ def create_app() -> Flask:
     def health_check() -> Any:
         return jsonify({"status": "ok"}), 200
 
-    @app.route("/login", methods=["POST"])
-    def login_user() -> Any:
+    @app.route("/password-reset/request", methods=["POST"])
+    def request_password_reset() -> Any:
         data = request.get_json(silent=True) or {}
         email = data.get("email")
-        password = data.get("password")
+        if not email:
+            app.logger.warning("Password reset request missing email field.")
+            return jsonify({"error": "Email is required"}), 400
 
-        if not email or not password:
-            app.logger.warning("Missing email or password during login.")
-            return jsonify({"error": "Email and password are required"}), 400
+        token = secrets.token_urlsafe(32)
+        PASSWORD_RESET_TOKENS[email] = {
+            "token": token,
+            "expires_at": datetime.utcnow() + timedelta(hours=TOKEN_EXPIRATION_HOURS),
+            "verified": False
+        }
 
-        if FAILED_ATTEMPTS.get(email, 0) >= MAX_ATTEMPTS:
-            app.logger.warning("Account locked due to excessive failed attempts for %s", email)
-            return jsonify({"error": "Account locked due to too many failed attempts"}), 403
-
-        # Dummy validation for demonstration
-        if password != "securePassword123":
-            FAILED_ATTEMPTS[email] = FAILED_ATTEMPTS.get(email, 0) + 1
-            remaining = MAX_ATTEMPTS - FAILED_ATTEMPTS[email]
-            app.logger.info("Invalid login attempt for %s, %d attempts left", email, remaining)
-            return jsonify({"error": f"Invalid credentials. {remaining} attempts remaining"}), 401
-
-        FAILED_ATTEMPTS.pop(email, None)
-        LAST_LOGIN[email] = datetime.utcnow()
-        SESSION_EXPIRY[email] = datetime.utcnow() + timedelta(minutes=SESSION_TIMEOUT_MINUTES)
-        app.logger.info("User %s logged in successfully", email)
+        app.logger.info("Password reset token generated for email %s", email)
+        # In a real system, send email here via integration
         return jsonify({
-            "message": "Login successful",
-            "session_expires_at": SESSION_EXPIRY[email].isoformat()
+            "message": "Password reset link sent to registered email",
+            "token": token
         }), 200
 
-    @app.route("/session", methods=["GET"])
-    def session_status() -> Any:
-        email = request.args.get("email")
-        if not email or email not in SESSION_EXPIRY:
-            return jsonify({"error": "Invalid session"}), 401
-        if datetime.utcnow() > SESSION_EXPIRY[email]:
-            SESSION_EXPIRY.pop(email)
-            app.logger.info("Session expired for %s", email)
-            return jsonify({"error": "Session expired"}), 403
-        return jsonify({"message": "Session active"}), 200
+    @app.route("/password-reset/verify", methods=["POST"])
+    def verify_reset_token() -> Any:
+        data = request.get_json(silent=True) or {}
+        email = data.get("email")
+        token = data.get("token")
+
+        info = PASSWORD_RESET_TOKENS.get(email)
+        if not info or info["token"] != token:
+            app.logger.warning("Invalid or missing reset token during verification.")
+            return jsonify({"error": "Invalid token"}), 400
+
+        if datetime.utcnow() > info["expires_at"]:
+            del PASSWORD_RESET_TOKENS[email]
+            app.logger.warning("Expired reset token for email %s", email)
+            return jsonify({"error": "Token expired"}), 403
+
+        info["verified"] = True
+        app.logger.info("Password reset token verified successfully for email %s", email)
+        return jsonify({"message": "Token verified successfully"}), 200
+
+    @app.route("/password-reset/confirm", methods=["POST"])
+    def confirm_password_reset() -> Any:
+        data = request.get_json(silent=True) or {}
+        email = data.get("email")
+        new_password = data.get("new_password")
+
+        info = PASSWORD_RESET_TOKENS.get(email)
+        if not info or not info.get("verified"):
+            return jsonify({"error": "Reset verification required"}), 400
+
+        if datetime.utcnow() > info["expires_at"]:
+            del PASSWORD_RESET_TOKENS[email]
+            app.logger.warning("Attempted password reset after token expiration for %s", email)
+            return jsonify({"error": "Token expired"}), 403
+
+        if not new_password or len(new_password) < 8:
+            return jsonify({"error": "Password must be at least 8 characters"}), 400
+
+        del PASSWORD_RESET_TOKENS[email]
+        app.logger.info("Password reset successful for email %s", email)
+        return jsonify({"message": "Password has been reset successfully"}), 200
 
     @app.errorhandler(Exception)
     def handle_exception(e: Exception) -> Any:
