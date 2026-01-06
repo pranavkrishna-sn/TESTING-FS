@@ -28,7 +28,7 @@ def configure_logging() -> None:
     })
 
 PRODUCTS: dict[int, dict[str, Any]] = {}
-CATEGORIES: dict[int, str] = {}
+ADMIN_TOKENS = {"admin12345"}
 PRODUCT_ID_COUNTER = 1
 
 def create_app() -> Flask:
@@ -39,59 +39,73 @@ def create_app() -> Flask:
     def health_check() -> Any:
         return jsonify({"status": "ok"}), 200
 
-    @app.route("/categories", methods=["POST"])
-    def add_category() -> Any:
-        nonlocal CATEGORIES
-        data = request.get_json(silent=True) or {}
-        category_name = data.get("name")
-        if not category_name:
-            return jsonify({"error": "Category name is required"}), 400
-        if category_name in CATEGORIES.values():
-            return jsonify({"error": "Category already exists"}), 400
-        category_id = len(CATEGORIES) + 1
-        CATEGORIES[category_id] = category_name
-        app.logger.info("Category '%s' created successfully.", category_name)
-        return jsonify({"message": "Category created", "id": category_id, "name": category_name}), 201
-
     @app.route("/products", methods=["POST"])
     def add_product() -> Any:
-        nonlocal PRODUCTS, PRODUCT_ID_COUNTER
+        nonlocal PRODUCT_ID_COUNTER
         data = request.get_json(silent=True) or {}
         name = data.get("name")
         price = data.get("price")
         description = data.get("description")
-        category_id = data.get("category_id")
 
-        if not name or not description or price is None or category_id is None:
-            return jsonify({"error": "Name, price, description, and category_id are required"}), 400
-
+        if not name or price is None or not description:
+            return jsonify({"error": "Name, price, and description are required"}), 400
         if not isinstance(price, (int, float)) or price <= 0:
-            return jsonify({"error": "Price must be a positive number"}), 400
-
+            return jsonify({"error": "Price must be a numeric positive value"}), 400
         if name in [p["name"] for p in PRODUCTS.values()]:
             return jsonify({"error": "Product name must be unique"}), 400
-
-        if category_id not in CATEGORIES:
-            return jsonify({"error": "Invalid category"}), 400
 
         product = {
             "id": PRODUCT_ID_COUNTER,
             "name": name,
             "price": price,
             "description": description,
-            "category_id": category_id,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         }
         PRODUCTS[PRODUCT_ID_COUNTER] = product
+        app.logger.info("Product '%s' created successfully.", name)
         PRODUCT_ID_COUNTER += 1
-        app.logger.info("Product '%s' added successfully.", name)
-        return jsonify({"message": "Product added", "product": product}), 201
+        return jsonify({"message": "Product created", "product": product}), 201
+
+    @app.route("/products/<int:product_id>", methods=["PUT"])
+    def update_product(product_id: int) -> Any:
+        token = request.headers.get("X-Admin-Token")
+        if token not in ADMIN_TOKENS:
+            app.logger.warning("Unauthorized access attempt for product update.")
+            return jsonify({"error": "Unauthorized - Admin access required"}), 403
+
+        data = request.get_json(silent=True) or {}
+        product = PRODUCTS.get(product_id)
+        if not product:
+            return jsonify({"error": "Product not found"}), 404
+
+        name = data.get("name")
+        price = data.get("price")
+        description = data.get("description")
+
+        if name and name != product["name"]:
+            if name in [p["name"] for p in PRODUCTS.values()]:
+                return jsonify({"error": "Product name must be unique"}), 400
+            product["name"] = name
+
+        if price is not None:
+            if not isinstance(price, (int, float)) or price <= 0:
+                return jsonify({"error": "Price must be a numeric positive value"}), 400
+            product["price"] = price
+
+        if description is not None:
+            if description.strip() == "":
+                return jsonify({"error": "Description cannot be removed or empty"}), 400
+            product["description"] = description
+
+        product["updated_at"] = datetime.utcnow().isoformat()
+        PRODUCTS[product_id] = product
+        app.logger.info("Product ID %s updated successfully.", product_id)
+        return jsonify({"message": "Product updated successfully", "product": product}), 200
 
     @app.route("/products", methods=["GET"])
     def list_products() -> Any:
-        all_products = list(PRODUCTS.values())
-        return jsonify(all_products), 200
+        return jsonify(list(PRODUCTS.values())), 200
 
     @app.errorhandler(Exception)
     def handle_exception(e: Exception) -> Any:
