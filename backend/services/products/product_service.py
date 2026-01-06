@@ -6,11 +6,11 @@ class ProductService:
     def __init__(self, product_repository: ProductRepository):
         self.product_repository = product_repository
 
-    def add_product(self, name: str, price: float, description: str, category: Optional[str] = None) -> Product:
-        product = Product(name=name, price=price, description=description, category=category)
+    def add_product(self, name: str, price: float, description: str, category_id: int) -> Product:
+        product = Product(name=name, price=price, description=description, category_id=category_id)
         return self.product_repository.add_product(product)
 
-    def update_product(self, product_id: int, name: Optional[str], price: Optional[float], description: Optional[str], category: Optional[str]) -> bool:
+    def update_product(self, product_id: int, name: Optional[str], price: Optional[float], description: Optional[str], category_id: Optional[int]) -> bool:
         product = self.product_repository.get_product_by_id(product_id)
         if not product:
             return False
@@ -21,8 +21,8 @@ class ProductService:
             product.price = price
         if description:
             product.description = description
-        if category is not None:
-            product.category = category
+        if category_id is not None:
+            product.category_id = category_id
 
         self.product_repository.update_product(product)
         return True
