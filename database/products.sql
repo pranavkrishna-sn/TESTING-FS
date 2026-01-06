@@ -2,7 +2,8 @@ CREATE TABLE products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     price REAL NOT NULL CHECK(price > 0),
-    description TEXT NOT NULL CHECK(length(description) > 0),
+    description TEXT NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
