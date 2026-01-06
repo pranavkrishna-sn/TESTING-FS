@@ -8,8 +8,8 @@ class ProductRepository:
 
     def add_product(self, product: Product) -> Product:
         query = """
-        INSERT INTO products (name, price, description, category, is_deleted, created_at, updated_at)
-        VALUES (:name, :price, :description, :category, :is_deleted, :created_at, :updated_at)
+        INSERT INTO products (name, price, description, category_id, is_deleted, created_at, updated_at)
+        VALUES (:name, :price, :description, :category_id, :is_deleted, :created_at, :updated_at)
         RETURNING id;
         """
         cursor = self.db.cursor()
@@ -24,12 +24,12 @@ class ProductRepository:
         cursor.execute(query, {"name": name})
         row = cursor.fetchone()
         if row:
-            return Product(id=row[0], name=row[1], price=row[2], description=row[3], category=row[4], is_deleted=row[5], created_at=row[6], updated_at=row[7])
+            return Product(id=row[0], name=row[1], price=row[2], description=row[3], category_id=row[4], is_deleted=row[5], created_at=row[6], updated_at=row[7])
         return None
 
     def update_product(self, product: Product) -> None:
         query = """
-        UPDATE products SET name = :name, price = :price, description = :description, category = :category, is_deleted = :is_deleted, updated_at = :updated_at
+        UPDATE products SET name = :name, price = :price, description = :description, category_id = :category_id, is_deleted = :is_deleted, updated_at = :updated_at
         WHERE id = :id;
         """
         cursor = self.db.cursor()
@@ -42,7 +42,7 @@ class ProductRepository:
         cursor.execute(query, {"id": product_id})
         row = cursor.fetchone()
         if row:
-            return Product(id=row[0], name=row[1], price=row[2], description=row[3], category=row[4], is_deleted=row[5], created_at=row[6], updated_at=row[7])
+            return Product(id=row[0], name=row[1], price=row[2], description=row[3], category_id=row[4], is_deleted=row[5], created_at=row[6], updated_at=row[7])
         return None
 
     def delete_product(self, product_id: int) -> bool:
@@ -57,15 +57,15 @@ class ProductRepository:
         cursor = self.db.cursor()
         cursor.execute(query)
         rows = cursor.fetchall()
-        return [Product(id=row[0], name=row[1], price=row[2], description=row[3], category=row[4], is_deleted=row[5], created_at=row[6], updated_at=row[7]) for row in rows]
+        return [Product(id=row[0], name=row[1], price=row[2], description=row[3], category_id=row[4], is_deleted=row[5], created_at=row[6], updated_at=row[7]) for row in rows]
 
     def search_products(self, term: str, limit: int, offset: int) -> List[Product]:
         query = """
         SELECT * FROM products
-        WHERE (name LIKE :term OR description LIKE :term OR category LIKE :term) AND is_deleted = FALSE
+        WHERE (name LIKE :term OR description LIKE :term) AND is_deleted = FALSE
         LIMIT :limit OFFSET :offset;
         """
         cursor = self.db.cursor()
         cursor.execute(query, {"term": f"%{term}%", "limit": limit, "offset": offset})
         rows = cursor.fetchall()
-        return [Product(id=row[0], name=row[1], price=row[2], description=row[3], category=row[4], is_deleted=row[5], created_at=row[6], updated_at=row[7]) for row in rows]
+        return [Product(id=row[0], name=row[1], price=row[2], description=row[3], category_id=row[4], is_deleted=row[5], created_at=row[6], updated_at=row[7]) for row in rows]
