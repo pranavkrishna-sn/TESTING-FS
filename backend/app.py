@@ -47,65 +47,52 @@ def create_app() -> Flask:
         price = data.get("price")
         description = data.get("description")
 
-        if not name or price is None or not description:
-            return jsonify({"error": "Name, price, and description are required"}), 400
-        if not isinstance(price, (int, float)) or price <= 0:
-            return jsonify({"error": "Price must be a numeric positive value"}), 400
-        if name in [p["name"] for p in PRODUCTS.values()]:
+        if not name or not description or price is None:
+            return jsonify({"error": "Name, description and price are required"}), 400
+        if name in [p["name"] for p in PRODUCTS.values() if not p["deleted"]]:
             return jsonify({"error": "Product name must be unique"}), 400
+        if not isinstance(price, (int, float)) or price <= 0:
+            return jsonify({"error": "Invalid price"}), 400
 
-        product = {
+        PRODUCTS[PRODUCT_ID_COUNTER] = {
             "id": PRODUCT_ID_COUNTER,
             "name": name,
             "price": price,
             "description": description,
+            "deleted": False,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat()
         }
-        PRODUCTS[PRODUCT_ID_COUNTER] = product
         app.logger.info("Product '%s' created successfully.", name)
         PRODUCT_ID_COUNTER += 1
-        return jsonify({"message": "Product created", "product": product}), 201
+        return jsonify({"message": "Product created"}), 201
 
-    @app.route("/products/<int:product_id>", methods=["PUT"])
-    def update_product(product_id: int) -> Any:
+    @app.route("/products/<int:product_id>/delete", methods=["DELETE"])
+    def delete_product(product_id: int) -> Any:
         token = request.headers.get("X-Admin-Token")
-        if token not in ADMIN_TOKENS:
-            app.logger.warning("Unauthorized access attempt for product update.")
-            return jsonify({"error": "Unauthorized - Admin access required"}), 403
+        confirm = request.args.get("confirm", "false").lower()
 
-        data = request.get_json(silent=True) or {}
+        if token not in ADMIN_TOKENS:
+            app.logger.warning("Unauthorized delete attempt.")
+            return jsonify({"error": "Unauthorized - Admin access required"}), 403
+        if confirm != "true":
+            return jsonify({"error": "Confirmation required"}), 400
+
         product = PRODUCTS.get(product_id)
-        if not product:
+        if not product or product["deleted"]:
+            app.logger.warning("Product not found or already deleted, ID: %s", product_id)
             return jsonify({"error": "Product not found"}), 404
 
-        name = data.get("name")
-        price = data.get("price")
-        description = data.get("description")
-
-        if name and name != product["name"]:
-            if name in [p["name"] for p in PRODUCTS.values()]:
-                return jsonify({"error": "Product name must be unique"}), 400
-            product["name"] = name
-
-        if price is not None:
-            if not isinstance(price, (int, float)) or price <= 0:
-                return jsonify({"error": "Price must be a numeric positive value"}), 400
-            product["price"] = price
-
-        if description is not None:
-            if description.strip() == "":
-                return jsonify({"error": "Description cannot be removed or empty"}), 400
-            product["description"] = description
-
+        product["deleted"] = True
         product["updated_at"] = datetime.utcnow().isoformat()
         PRODUCTS[product_id] = product
-        app.logger.info("Product ID %s updated successfully.", product_id)
-        return jsonify({"message": "Product updated successfully", "product": product}), 200
+        app.logger.info("Product %s marked as deleted.", product["name"])
+        return jsonify({"message": f"Product '{product['name']}' deleted successfully"}), 200
 
     @app.route("/products", methods=["GET"])
     def list_products() -> Any:
-        return jsonify(list(PRODUCTS.values())), 200
+        visible_products = [p for p in PRODUCTS.values() if not p["deleted"]]
+        return jsonify(visible_products), 200
 
     @app.errorhandler(Exception)
     def handle_exception(e: Exception) -> Any:
