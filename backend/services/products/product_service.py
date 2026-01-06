@@ -32,3 +32,7 @@ class ProductService:
 
     def get_all_products(self) -> List[Product]:
         return self.product_repository.get_all_products()
+
+    def search_products(self, term: str, page: int = 1, per_page: int = 10) -> List[Product]:
+        offset = (page - 1) * per_page
+        return self.product_repository.search_products(term, per_page, offset)
