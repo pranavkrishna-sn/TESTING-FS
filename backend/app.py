@@ -1,7 +1,6 @@
 import logging
 import sys
-import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 from flask import Flask, jsonify, request
 from logging.config import dictConfig
@@ -28,8 +27,7 @@ def configure_logging() -> None:
         }
     })
 
-PASSWORD_RESET_TOKENS: dict[str, dict[str, Any]] = {}
-TOKEN_EXPIRATION_HOURS = 24
+USER_PROFILES: dict[str, dict[str, Any]] = {}
 
 def create_app() -> Flask:
     configure_logging()
@@ -39,69 +37,37 @@ def create_app() -> Flask:
     def health_check() -> Any:
         return jsonify({"status": "ok"}), 200
 
-    @app.route("/password-reset/request", methods=["POST"])
-    def request_password_reset() -> Any:
+    @app.route("/profile/<string:email>", methods=["GET"])
+    def get_profile(email: str) -> Any:
+        profile = USER_PROFILES.get(email)
+        if not profile:
+            app.logger.warning("Profile not found for %s", email)
+            return jsonify({"error": "Profile not found"}), 404
+        return jsonify(profile), 200
+
+    @app.route("/profile/<string:email>", methods=["PUT"])
+    def update_profile(email: str) -> Any:
         data = request.get_json(silent=True) or {}
-        email = data.get("email")
-        if not email:
-            app.logger.warning("Password reset request missing email field.")
-            return jsonify({"error": "Email is required"}), 400
+        if not data:
+            app.logger.warning("Update request missing data for %s", email)
+            return jsonify({"error": "No update data provided"}), 400
 
-        token = secrets.token_urlsafe(32)
-        PASSWORD_RESET_TOKENS[email] = {
-            "token": token,
-            "expires_at": datetime.utcnow() + timedelta(hours=TOKEN_EXPIRATION_HOURS),
-            "verified": False
-        }
+        current = USER_PROFILES.get(email)
+        if not current:
+            current = {
+                "email": email,
+                "name": "",
+                "preferences": {},
+                "updated_at": datetime.utcnow().isoformat()
+            }
 
-        app.logger.info("Password reset token generated for email %s", email)
-        # In a real system, send email here via integration
-        return jsonify({
-            "message": "Password reset link sent to registered email",
-            "token": token
-        }), 200
-
-    @app.route("/password-reset/verify", methods=["POST"])
-    def verify_reset_token() -> Any:
-        data = request.get_json(silent=True) or {}
-        email = data.get("email")
-        token = data.get("token")
-
-        info = PASSWORD_RESET_TOKENS.get(email)
-        if not info or info["token"] != token:
-            app.logger.warning("Invalid or missing reset token during verification.")
-            return jsonify({"error": "Invalid token"}), 400
-
-        if datetime.utcnow() > info["expires_at"]:
-            del PASSWORD_RESET_TOKENS[email]
-            app.logger.warning("Expired reset token for email %s", email)
-            return jsonify({"error": "Token expired"}), 403
-
-        info["verified"] = True
-        app.logger.info("Password reset token verified successfully for email %s", email)
-        return jsonify({"message": "Token verified successfully"}), 200
-
-    @app.route("/password-reset/confirm", methods=["POST"])
-    def confirm_password_reset() -> Any:
-        data = request.get_json(silent=True) or {}
-        email = data.get("email")
-        new_password = data.get("new_password")
-
-        info = PASSWORD_RESET_TOKENS.get(email)
-        if not info or not info.get("verified"):
-            return jsonify({"error": "Reset verification required"}), 400
-
-        if datetime.utcnow() > info["expires_at"]:
-            del PASSWORD_RESET_TOKENS[email]
-            app.logger.warning("Attempted password reset after token expiration for %s", email)
-            return jsonify({"error": "Token expired"}), 403
-
-        if not new_password or len(new_password) < 8:
-            return jsonify({"error": "Password must be at least 8 characters"}), 400
-
-        del PASSWORD_RESET_TOKENS[email]
-        app.logger.info("Password reset successful for email %s", email)
-        return jsonify({"message": "Password has been reset successfully"}), 200
+        for key, value in data.items():
+            if key != "email":
+                current[key] = value
+        current["updated_at"] = datetime.utcnow().isoformat()
+        USER_PROFILES[email] = current
+        app.logger.info("Profile updated successfully for %s", email)
+        return jsonify({"message": "Profile updated", "profile": current}), 200
 
     @app.errorhandler(Exception)
     def handle_exception(e: Exception) -> Any:
