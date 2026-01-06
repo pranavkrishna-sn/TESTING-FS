@@ -1,6 +1,6 @@
 from backend.repositories.products.product_repository import ProductRepository
 from backend.models.product import Product
-from typing import Optional
+from typing import Optional, List
 
 class ProductService:
     def __init__(self, product_repository: ProductRepository):
@@ -26,3 +26,9 @@ class ProductService:
 
         self.product_repository.update_product(product)
         return True
+
+    def delete_product(self, product_id: int) -> bool:
+        return self.product_repository.delete_product(product_id)
+
+    def get_all_products(self) -> List[Product]:
+        return self.product_repository.get_all_products()
