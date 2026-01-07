@@ -36,3 +36,8 @@ class CartRepository:
     def save_item(cart_item: CartItem) -> None:
         db.session.add(cart_item)
         db.session.commit()
+
+    @staticmethod
+    def delete_item(cart_item: CartItem) -> None:
+        db.session.delete(cart_item)
+        db.session.commit()
