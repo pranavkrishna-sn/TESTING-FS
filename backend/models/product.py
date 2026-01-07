@@ -9,6 +9,5 @@ class Product:
     description: str
     price: float
     stock_quantity: int
-    category_id: int
     created_at: datetime
     updated_at: datetime
