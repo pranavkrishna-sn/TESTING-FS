@@ -1,0 +1,8 @@
+CREATE TABLE carts (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER,
+    session_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
