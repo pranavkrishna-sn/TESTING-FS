@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, session
 from backend.models.cart.cart import Cart, CartItem
 from backend.models.products.product import Product
 from backend.repositories.cart.cart_repository import CartRepository
+from backend.services.cart.cart_service import CartService
 from backend import db
 
 cart = Blueprint('cart', __name__)
@@ -122,3 +123,15 @@ def update_product_quantity_in_cart():
         'message': 'Product quantity updated successfully',
         'total_price': total_price
     }), 200
+
+@cart.route('/save', methods=['POST'])
+def save_cart():
+    user_id = session.get('user_id')
+    session_id = session.sid
+
+    if not user_id:
+        return jsonify({'message': 'Unauthorized'}), 401
+
+    CartService.save_cart(user_id, session_id)
+
+    return jsonify({'message': 'Cart saved successfully'}), 200
