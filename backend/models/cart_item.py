@@ -8,5 +8,6 @@ class CartItem:
     cart_id: int
     product_id: int
     quantity: int
+    price_at_time: float
     created_at: datetime
     updated_at: datetime
