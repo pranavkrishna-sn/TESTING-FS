@@ -60,3 +60,22 @@ def update_product(product_id):
     db.session.commit()
 
     return jsonify({'message': 'Product updated successfully'}), 200
+
+@products.route('/delete/<int:product_id>', methods=['DELETE'])
+def delete_product(product_id):
+    data = request.get_json()
+
+    if not data.get('is_admin', False):
+        return jsonify({'message': 'Unauthorized'}), 403
+
+    product = ProductRepository.find_by_id(product_id)
+    if not product:
+        return jsonify({'message': 'Product not found'}), 404
+
+    if not data.get('confirm', False):
+        return jsonify({'message': 'Confirmation required'}), 400
+
+    ProductRepository.delete(product)
+    db.session.commit()
+
+    return jsonify({'message': 'Product deleted successfully'}), 200
