@@ -1,4 +1,4 @@
-from backend.models.products.product import Product
+from backend.models.products.product import Product, Category
 from backend import db
 from sqlalchemy import or_
 
@@ -31,3 +31,21 @@ class ProductRepository:
             )
         ).paginate(page, per_page, error_out=False)
         return products.items, products.total
+
+class CategoryRepository:
+    @staticmethod
+    def find_by_name(name: str) -> Category:
+        return Category.query.filter_by(name=name).first()
+
+    @staticmethod
+    def find_by_id(category_id: int) -> Category:
+        return Category.query.get(category_id)
+
+    @staticmethod
+    def save(category: Category) -> None:
+        db.session.add(category)
+        db.session.commit()
+
+    @staticmethod
+    def find_all() -> list[Category]:
+        return Category.query.all()
