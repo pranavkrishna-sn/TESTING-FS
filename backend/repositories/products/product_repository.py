@@ -7,6 +7,10 @@ class ProductRepository:
         return Product.query.filter_by(name=name).first()
 
     @staticmethod
+    def find_by_id(product_id: int) -> Product:
+        return Product.query.get(product_id)
+
+    @staticmethod
     def save(product: Product) -> None:
         db.session.add(product)
         db.session.commit()
