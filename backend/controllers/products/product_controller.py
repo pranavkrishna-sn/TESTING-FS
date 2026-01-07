@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from backend.models.products.product import Product
-from backend.repositories.products.product_repository import ProductRepository
+from backend.models.products.product import Product, Category
+from backend.repositories.products.product_repository import ProductRepository, CategoryRepository
 from backend import db
 
 products = Blueprint('products', __name__)
@@ -12,6 +12,7 @@ def add_product():
     name = data.get('name')
     price = data.get('price')
     description = data.get('description')
+    category_id = data.get('category_id')
 
     if not name or ProductRepository.find_by_name(name):
         return jsonify({'message': 'Product name is required and must be unique'}), 400
@@ -22,7 +23,10 @@ def add_product():
     if not description:
         return jsonify({'message': 'Product description cannot be empty'}), 400
 
-    new_product = Product(name=name, price=price, description=description)
+    if not category_id or not CategoryRepository.find_by_id(category_id):
+        return jsonify({'message': 'Valid category is required'}), 400
+
+    new_product = Product(name=name, price=price, description=description, category_id=category_id)
     ProductRepository.save(new_product)
     db.session.commit()
 
@@ -42,6 +46,7 @@ def update_product(product_id):
     name = data.get('name')
     price = data.get('price')
     description = data.get('description')
+    category_id = data.get('category_id')
 
     if name and name != product.name:
         if ProductRepository.find_by_name(name):
@@ -55,6 +60,11 @@ def update_product(product_id):
 
     if description:
         product.description = description
+
+    if category_id:
+        if not CategoryRepository.find_by_id(category_id):
+            return jsonify({'message': 'Valid category is required'}), 400
+        product.category_id = category_id
 
     ProductRepository.save(product)
     db.session.commit()
@@ -95,6 +105,7 @@ def search_products():
             'name': product.name,
             'price': product.price,
             'description': product.description,
+            'category': product.category.name,
             'created_at': product.created_at,
             'updated_at': product.updated_at
         })
@@ -105,3 +116,35 @@ def search_products():
         'page': page,
         'per_page': per_page
     }), 200
+
+@products.route('/categories', methods=['POST'])
+def add_category():
+    data = request.get_json()
+    name = data.get('name')
+    parent_id = data.get('parent_id', None)
+
+    if not name or CategoryRepository.find_by_name(name):
+        return jsonify({'message': 'Category name is required and must be unique'}), 400
+
+    if parent_id:
+        parent = CategoryRepository.find_by_id(parent_id)
+        if not parent:
+            return jsonify({'message': 'Parent category not found'}), 404
+
+    new_category = Category(name=name, parent_id=parent_id)
+    CategoryRepository.save(new_category)
+    db.session.commit()
+
+    return jsonify({'message': 'Category added successfully'}), 201
+
+@products.route('/categories', methods=['GET'])
+def get_categories():
+    categories = CategoryRepository.find_all()
+    result = []
+    for category in categories:
+        result.append({
+            'id': category.id,
+            'name': category.name,
+            'parent_id': category.parent_id
+        })
+    return jsonify(result), 200
