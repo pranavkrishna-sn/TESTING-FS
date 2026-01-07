@@ -87,3 +87,38 @@ def remove_product_from_cart():
     db.session.commit()
 
     return jsonify({'message': 'Product removed from cart successfully'}), 200
+
+@cart.route('/update', methods=['PUT'])
+def update_product_quantity_in_cart():
+    data = request.get_json()
+    product_id = data.get('product_id')
+    quantity = data.get('quantity')
+
+    if quantity is None or quantity <= 0:
+        return jsonify({'message': 'Quantity must be a positive integer'}), 400
+
+    user_id = session.get('user_id')
+    session_id = session.sid
+
+    if user_id:
+        cart = CartRepository.find_by_user(user_id)
+    else:
+        cart = CartRepository.find_by_session(session_id)
+
+    if not cart:
+        return jsonify({'message': 'Cart is empty'}), 404
+
+    cart_item = CartRepository.find_item(cart, product_id)
+    if not cart_item:
+        return jsonify({'message': 'Product not found in cart'}), 404
+
+    cart_item.quantity = quantity
+    CartRepository.save_item(cart_item)
+    db.session.commit()
+
+    total_price = sum(item.quantity * item.product.price for item in cart.items)
+
+    return jsonify({
+        'message': 'Product quantity updated successfully',
+        'total_price': total_price
+    }), 200
