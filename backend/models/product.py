@@ -5,10 +5,10 @@ from datetime import datetime
 @dataclass
 class Product:
     id: int
-    category_id: int
     name: str
     description: str
     price: float
-    attributes: str | None
+    stock_quantity: int
+    category_id: int
     created_at: datetime
     updated_at: datetime
