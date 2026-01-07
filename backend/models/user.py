@@ -7,5 +7,6 @@ class User:
     id: int
     email: str
     password_hash: str
+    is_active: bool
     created_at: datetime
     updated_at: datetime
