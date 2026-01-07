@@ -3,6 +3,10 @@ from backend import db
 
 class UserRepository:
     @staticmethod
+    def find_by_username(username: str) -> User:
+        return User.query.filter_by(username=username).first()
+
+    @staticmethod
     def find_by_email(email: str) -> User:
         return User.query.filter_by(email=email).first()
 
